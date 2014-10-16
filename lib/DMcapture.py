@@ -25,7 +25,8 @@ def F_capture(i, st, dm):
         selfcapt_yr = 1.06e-3 * (dm.sigxx/1.e-24) / dm.mx_v[i] * dm.rhox    # yr-1
         selfcapt    = c_s2yr(selfcapt_yr)     # s-1
         print "   selfcapt=",selfcapt,"s-1 or ",selfcapt_yr," yr"
-    return capt, selfcapt
+    dm.Capt_v[i]     = capt
+    dm.selfCapt_v[i] = selfcapt
 
 #####################
 #    Gould (87)  (adapted from Moskalenko)
