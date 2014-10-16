@@ -17,18 +17,18 @@ def F_checksigxxconstraints(i, dm):
         sys.exit() 
 
 
-def F_calcNxnum(t, dm, capt, selfcapt):
+def F_calcNxnum(i, t, dm):
     # Nx(t) is found solving dN/dt through odeint. The result is a list, we are interested in the [0]
     # scipy.integrate.odeint(func, y0, t, args=(), Dfun=None, col_deriv=0, full_output=0, ml=None, mu=None, rtol=None, atol=None, tcrit=None, h0=0.0, hmax=0.0, hmin=0.0, ixpr=0, mxstep=0, mxhnil=0, mxordn=12, mxords=5, printmessg=0)
     # Case 1: capture and annihilation, with rx(t)
     print '-- Nx(t):'
-    tuple1 = capt, dm.anncs, t.rx, t.time                 # extra arguments for function dN1dt
+    tuple1 = dm.Capt_v[i], dm.anncs, t.rx, t.time                 # extra arguments for function dN1dt
     Nx_C_A = np.array([item[0] for item in odeint(dNdt_C_A, dm.Nxinit, t.time, args=(tuple1))])
     print "   ... Nx_C_A(t) calculated"
     # Case 2: capture, selfcapture and annihilation, with rx(t)
     Nx_C_sC_A = 0.
     if dm.SELFCAPT:
-        tuple2 = capt, dm.anncs, t.rx, t.time, selfcapt         # extra arguments for function dNdt_C_sC_A_rxconst
+        tuple2 = dm.Capt_v[i], dm.anncs, t.rx, t.time, dm.selfCapt_v[i]         # extra arguments for function dNdt_C_sC_A_rxconst
         Nx_C_sC_A = np.array([item[0] for item in odeint(dNdt_C_sC_A, dm.Nxinit, t.time, args=(tuple2))])
         print "   ... Nx_C_sC_A(t) calculated"
         Nx = Nx_C_sC_A
@@ -96,9 +96,9 @@ def dN32dt(Nx,t,capt,anncs,rxvect,time,selfcapt,Nx21geoxx,kgeoxx,kbec,annbec):
         rxgeoxx = rxvect[kgeoxx]
         return capt + selfcapt*Nx21geoxx*m.pow(rx/rxgeoxx,2.) - ann*(Nx[0]**2)
 
-def F_checkNxanalytical(t, dm, capt, rxth, Nx_C_A):
+def F_checkNxanalytical(i, t, dm, rxth, Nx_C_A):
     # Calc Nx_C_A(t) from analytical solution
-    Nx_C_AA = [ m.sqrt(capt/(0.5*F_ann(dm.anncs,rxth)))*m.tanh(m.sqrt(capt*(0.5*F_ann(dm.anncs,rxth)))*t) for t in t.time]
+    Nx_C_AA = [ m.sqrt(dm.Capt_v[i]/(0.5*F_ann(dm.anncs,rxth)))*m.tanh(m.sqrt(dm.Capt_v[i]*(0.5*F_ann(dm.anncs,rxth)))*t) for t in t.time]
     for it1,it2 in zip(Nx_C_A,Nx_C_AA):
         print "%.2e %.2e" % (it1,it2)       
 #    --> the test shows that both solution are identical
@@ -184,32 +184,16 @@ def F_calcDMnumbers(i, t, st, dm, rxth):
 #   print "      Ngeoxxvect=",Ngeoxxvect
     return Nsg,Nsgvect,Nfe,Nde,Ngeoxx,Ngeoxxvect,Nbec,Nchadeg
 
-def F_checkSelfColl_Deg_Bec(i, t, dm, Nx, Nsgvect, Nde, Nfe, Ngeoxxvect, Nbec):
+def F_checkSelfColl_Deg_geoxx_Bec_eq(i, t, dm, Nx, Nsgvect, Nde, Nfe, Ngeoxxvect, Nbec):
     kgeoxx = 0 ; kbec = 0
-    for k in xrange(len(t.time)):
-        if Nx[k] >= Nsgvect[k]:
-            kscoll = k
-            dm.tNsg_v[i] = t.time[kscoll]
-            print "-- DM reaches self gravitation (self-collapse) at t=%.2e" % dm.tNsg_v[i]
-            print "t.time[kscoll]=%.2e, Nx[kscoll]=%.2e "% (t.time[kscoll],Nx[kscoll])
-            SELFCOLL  = True
-            break
-        elif k == (len(t.time)-1):
-            print "-- Nsg not reached within the age of the Universe"
-            dm.notes_v[i]=dm.notes_v[i]+' 1'
-            kscoll = (len(t.time)-1)
-            SELFCOLL  = False
-    for k in xrange(len(t.time)):
-        if (Nx[k] >= Nde and Nx[k] >= Nfe and Nx[k] < Nx[kscoll] ):
-            print "-- Attention: degenerate Dark Star formed at t=%.2e (before self-collapse)" % t.time[k]
-            dm.notes_v[i]=dm.notes_v[i]+' 2'
-            dm.DEG = True
-            break
+
+    kscoll = F_checkSelfColl_Deg(i, t, dm, Nx, Nsgvect, Nde, Nfe)
+
     if dm.SELFCAPT:
         for k in xrange(len(t.time)):
             if Nx[k]>Ngeoxxvect[k]:
-                print "Ngeoxxvect(=%e) was reached at t=%.2e, check if geoxx limit was correctly taken into account" % (Ngeoxxvect[k],t.time[k])
-                dm.notes_v[i]=dm.notes_v[i]+' 5'
+                print "Geometrical limit in self-capture was reached at t=%.2e." % t.time[k]
+                dm.notes_t[i].append(4) #dm.notes_v[i]=dm.notes_v[i]+' 5'
                 kgeoxx = k
                 break
     if dm.BOSON:
@@ -217,7 +201,7 @@ def F_checkSelfColl_Deg_Bec(i, t, dm, Nx, Nsgvect, Nde, Nfe, Ngeoxxvect, Nbec):
 #            print 'Nx[k]=',Nx[k],' Nbec=',Nbec
             if Nx[k]>Nbec:
                 print "Nbec(=%e) was reached at t=%.2e, check if BEC was correctly taken into account" % (Nbec,t.time[k])
-                dm.notes_v[i]=dm.notes_v[i]+' 6'
+                dm.notes_t[i].append(5) #dm.notes_v[i]=dm.notes_v[i]+' 4'
                 kbec = k
                 dm.BEC = True
                 break
@@ -226,9 +210,9 @@ def F_checkSelfColl_Deg_Bec(i, t, dm, Nx, Nsgvect, Nde, Nfe, Ngeoxxvect, Nbec):
             print "DM is boson but BEC is not formed (Nxmax=%.2e and Nbec=%.2e)" % (Nx[len(t.time)-1],Nbec)
         if dm.BEC and dm.SELFCAPT and kbec <= kgeoxx:
             print " BEC occurs before geoxx limit, check if implementation is correct in this case"
-            dm.notes_v[i]=dm.notes_v[i]+' 7'
+            dm.notes_t[i].append(6) #dm.notes_v[i]=dm.notes_v[i]+' 7'
 
-    return SELFCOLL, kscoll, kgeoxx, kbec
+    return kscoll, kgeoxx, kbec
 
 def F_calctimeSelfColl_Bec(t, dm, Nx, Nsg, Nbec, kbec):
     """ More characteristic time scales.
@@ -257,11 +241,11 @@ def F_calcBECcharact(i, t, dm, kbec):
             t.rx[k]     = rxbec
     return rxbec, annbec
 
-def F_recalcNx_C_sC_A_with_geoxx(t, dm, capt, selfcapt, Nx_C_sC_A, kgeoxx ):
+def F_recalcNx_C_sC_A_with_geoxx(i, t, dm, Nx_C_sC_A, kgeoxx ):
     """ Update case 2: capture, selfcapture and annihilation, with rx(t) and with geoxx limit.
         The Nx_C_sC_A_geoxx SEEMS NOT CORRECT """
     assert dm.SELFCAPT== True, "Error, function F_recalcNx_C_sC_A_with_geoxx should only be called if SELFCAPT"
-    tuple22 = capt, dm.anncs, t.rx, t.time, selfcapt, Nx_C_sC_A[kgeoxx], kgeoxx         # extra arguments for function dNdt_C_sC_A_geo$
+    tuple22 = dm.Capt_v[i], dm.anncs, t.rx, t.time, dm.selfCapt_v[i], Nx_C_sC_A[kgeoxx], kgeoxx         # extra arguments for function dNdt_C_sC_A_geo$
     Nx_C_sC_A_geoxx = np.array([item[0] for item in odeint(dNdt_C_sC_A_geoxx,dm.Nxinit,t.time,args=(tuple22))])
     for k in xrange(len(t.time)):
 #        print 'Nx_C_sC_A_geoxx[k]=',Nx_C_sC_A_geoxx[k]
@@ -270,10 +254,10 @@ def F_recalcNx_C_sC_A_with_geoxx(t, dm, capt, selfcapt, Nx_C_sC_A, kgeoxx ):
     print "   ... Nx_C_sC_A(t) re-calculated to account for geo limit in selfcapture"
     return Nx_C_sC_A
 
-def F_calcNx_C_A_BEC(t, dm, capt, kbec, annbec):
+def F_calcNx_C_A_BEC(i, t, dm, kbec, annbec):
     """ Update case 1: capture and annihilation, with BEC after t>tNbec """
     assert (dm.BOSON and dm.BEC and not dm.SELFCAPT), "Error, function F_calcNx_C_A_BEC should not have been called"
-    tuple31 = capt, dm.anncs, t.rx, t.time, kbec, annbec         # extra arguments for function dN3dt
+    tuple31 = dm.Capt_v[i], dm.anncs, t.rx, t.time, kbec, annbec         # extra arguments for function dN3dt
     Nx_C_A_BEC = np.array([item[0] for item in odeint(dN31dt,dm.Nxinit,t.time,args=(tuple31))])
     print "   ... Nx31(t) calculated"
     return Nx_C_A_BEC
@@ -282,11 +266,12 @@ def F_recalckbec(i, t, dm, Nx_C_sC_A, Nbec, rxbec):
     assert (dm.BOSON and dm.BEC and dm.SELFCAPT), "Error, function F_recalckbec should not have been called"
     # kbec is recalculated with N22
     print "... kbec recalculated with new Nx_C_sC_A(t)"
+    if 4 in dm.notes_t[i]: dm.notes_t[i].remove(4)
     for k in xrange(len(t.time)):
 #        print 'Nx_C_sC_A[k]=',Nx_C_sC_A[k],' Nbec=',Nbec
         if Nx_C_sC_A[k]>Nbec:
             print "Nbec(=%e) was reached at t=%.2e and should be taken into account" % (Nbec,t.time[k])
-            dm.notes_v[i]=dm.notes_v[i]+' 6'
+            if 4 not in dm.notes_t[i]: dm.notes_t[i].append(4) #dm.notes_v[i]=dm.notes_v[i]+' 6'
             kbec = k
             break
     # rvect is reset acordingly  
@@ -296,10 +281,10 @@ def F_recalckbec(i, t, dm, Nx_C_sC_A, Nbec, rxbec):
             t.rx[k] = rxbec
     return kbec
 
-def F_calcNx_C_sC_A_BEC(t, dm, Nx_C_sC_A, capt, selfcapt, kgeoxx, kbec, annbec):
+def F_calcNx_C_sC_A_BEC(i, t, dm, Nx_C_sC_A, kgeoxx, kbec, annbec):
     """ capture, selfcapture and annihilation, with BEC after for t>tNbec """
     assert (dm.BOSON and dm.BEC and dm.SELFCAPT), "Error, function F_calcNx_C_sC_A_BEC should not have been called"
-    tuple32 = capt, dm.anncs, t.rx, t.time, selfcapt, Nx_C_sC_A[kgeoxx], kgeoxx, kbec, annbec         # extra arguments for function d$
+    tuple32 = dm.Capt_v[i], dm.anncs, t.rx, t.time, dm.selfCapt_v[i], Nx_C_sC_A[kgeoxx], kgeoxx, kbec, annbec         # extra arguments for function d$
 #    print "tuple32= capt, dm.anncs, t.rx, t.time, selfcapt, Nx_C_sC_A[kgeoxx], kgeoxx, kbec, annbec"
 #    print "tuple32=",tuple32
     Nx_C_sC_A_BECtemp = np.array([item[0] for item in odeint(dN32dt,dm.Nxinit,t.time,args=(tuple32))])
@@ -313,69 +298,124 @@ def F_calcNx_C_sC_A_BEC(t, dm, Nx_C_sC_A, capt, selfcapt, kgeoxx, kbec, annbec):
     return Nx_C_sC_A_BEC
 
 
-def F_recheckSelfColl(i, t, dm, Nx, Nsgvect, Nde, Nfe):
+def F_checkSelfColl_Deg(i, t, dm, Nx, Nsgvect, Nde, Nfe):
+    print "... checking conditions for self-collapse and deg hold:"
     kscoll = 0
+    if 1 in dm.notes_t[i]: dm.notes_t[i].remove(1)
     for k in xrange(len(t.time)):
+        if k>=1 and (Nx[k] >= 1.e+100 or Nx[k] <= 1.e-100):
+            print "-- Error at k=%i, t=%.2e " % (k,t.time[k])
+            dm.notes_t[i].append(0)
+            dm.SELFCOLL[i]  = False
+            kscoll = k # well, is not k of selfcollapse, but k of error, but for printing output it work the same
+            break
         if Nx[k] >= Nsgvect[k]:
             kscoll = k
             print "-- DM reaches self gravitation (self-collapse) at t=%.2e" % t.time[k]
             print "t.time[kscoll]=%.2e, Nx[kscoll]=%.2e "% (t.time[kscoll],Nx[kscoll])
-            SELFCOLL  = True
+            dm.SELFCOLL[i]  = True
             break
         elif k == (len(t.time)-1):
-            print "-- Nsg not reached within the age of the Universe"
-            dm.notes_v[i]=dm.notes_v[i]+' 1'
+            print "-- No DM self-collapse (Nsg not reached within the age of the Universe)."
+            dm.notes_t[i].append(1) 
             kscoll = (len(t.time)-1)
-            SELFCOLL  = False
+            dm.SELFCOLL[i]  = False
+    if 3 in dm.notes_t[i]: dm.notes_t[i].remove(3)
     for k in xrange(len(t.time)):
         if (Nx[k] >= Nde and Nx[k] >= Nfe and Nx[k] < Nx[kscoll]):
             print "-- Attention: degenerate Dark Star formed at t=%.2e (before self-collapse)" % t.time[k]
-            dm.notes_v[i]=dm.notes_v[i]+' 4'
+            if 3 not in dm.notes_t[i]: dm.notes_t[i].append(3)
             dm.DEG = True
             break
 
-    return SELFCOLL, kscoll
+    return kscoll
 
-def F_computeCollapse(i, t, dm, Nx, capt, kscoll):
-    print "-- calculating DM self-collapse"
-    dm.tNsg_v[i] = t.time[kscoll]
-    dm.Nsg_v[i]  = Nx[kscoll]
-    rxsg         = t.rx[kscoll]         # cm
-    vxsg         = (t.rx[kscoll]-t.rx[kscoll-1])/(t.time[kscoll]-t.time[kscoll-1])      # cm/s
-    print "   the self-collapse was produced at t=%.2e when Nx=%2.e" % (dm.tNsg_v[i],dm.Nsg_v[i])
-    # free-fall time:
-    Massx  = c_GeV2kg(dm.Nsg_v[i]*dm.mx_v[i])
-    densff = Massx/4.*3./m.pi/m.pow(rxsg*1.e-2,3.)
-    tff    = m.sqrt(3.*m.pi/32./Grav/densff)
-    # timecoll list should be of smaller than tff
-    timecoll = [ (10.**(k/10.)) for k in range(-60,-15)]  # s
-#   timecoll = [ (10.**(k/10.)) for k in range(-40,0)]
-    # Solving 2nd order ordinary diff eq: d2r/dt2 = -GM/r2, converting it to 1rst order: rxvx = [r(t) , v(t)] see function d2rdt2
-    rxinit  = np.array([rxsg*1.e-2, vxsg*1.e-2])  # initial r and v
-    nada    = 1.
-    tuplerx = Massx, nada                 # extra arguments for function d2rdt2
-    rxvx    = odeint(d2rdt2,rxinit,timecoll,args=(tuplerx))
-    rxcoll  = np.array([item[0]*1.e+2 for item in rxvx])        # cm
-    vxcoll  = np.array([item[1] for item in rxvx])              # m/s
-    # Checking when rx gets to zero:
-    for k in xrange(len(timecoll)):
-        if rxcoll[k]==0. or rxcoll[k]>1.e+15 or rxcoll[k]<1.e-50:
-            kend=k-1
-            break
-    # re-size vectors to avoid the rx zeros:
-    rxcoll   = np.resize(rxcoll,kend+1)
-    timecoll = np.resize(timecoll,kend+1)
-    vxcoll   = np.resize(vxcoll,kend+1)
-    # Evolution of Nx(t) during collapse, only capture and annihilation, with rx(t), neglecting selfcapture
-    tuple1  = capt, dm.anncs, rxcoll, timecoll
-    Nxcoll  = np.array([item[0] for item in odeint(dNdt_C_A,dm.Nsg_v[i],timecoll,args=(tuple1))])
-    # Energy from annihilated particles:
-    Volx    = np.zeros(len(timecoll))
-    annrate = np.zeros(len(timecoll))
-    for k in xrange(0,kend+1):
-        Volx[k]    = 4./3.*m.pi*m.pow(rxcoll[k],3.)
-        try:
-            annrate[k] = dm.anncs/Volx[k] * m.pow(Nxcoll[k],2.)
-        except OverflowError:
-            annrate[k] = 9.e+99
+def F_computeCollapse(i, t, dm, Nx, kscoll):
+    if dm.SELFCOLL[i]:
+        print "-- calculating DM self-collapse"
+        dm.tNsg_v[i] = t.time[kscoll]
+        dm.Nsg_v[i]  = Nx[kscoll]
+        rxsg         = t.rx[kscoll]         # cm
+        vxsg         = (t.rx[kscoll]-t.rx[kscoll-1])/(t.time[kscoll]-t.time[kscoll-1])      # cm/s
+        print "   the self-collapse was produced at t=%.2e when Nx=%2.e" % (dm.tNsg_v[i],dm.Nsg_v[i])
+        # free-fall time:
+        Massx  = c_GeV2kg(dm.Nsg_v[i]*dm.mx_v[i])
+        densff = Massx/4.*3./m.pi/m.pow(rxsg*1.e-2,3.)
+        tff    = m.sqrt(3.*m.pi/32./Grav/densff)
+        # timecoll list should be of smaller than tff
+        timecoll = [ (tff*10.**(k/10.)) for k in range(-20,10)]  # s
+#       timecoll = [ (10.**(k/10.)) for k in range(-40,0)]
+#        timecoll = [ (0.99*tff)+(k*tff/500000.) for k in xrange(1,5000000)]
+        # Solving 2nd order ordinary diff eq: d2r/dt2 = -GM/r2, converting it to 1rst order: rxvx = [r(t) , v(t)] see function d2rdt2
+        rxinit  = np.array([rxsg*1.e-2, vxsg*1.e-2])  # initial r and v
+        nada    = 1.
+        tuplerx = Massx, nada                 # extra arguments for function d2rdt2
+        rxvx    = odeint(d2rdt2,rxinit,timecoll,args=(tuplerx))
+        rxcoll  = np.array([item[0]*1.e+2 for item in rxvx])        # cm
+        vxcoll  = np.array([item[1] for item in rxvx])              # m/s
+        # Checking when rx gets to zero:
+        kend = len(timecoll)-1
+        for k in xrange(len(timecoll)):
+            if rxcoll[k]==0. or rxcoll[k]>1.e+15 or rxcoll[k]<1.e-50:
+                kend=k-1
+                break
+        # re-size vectors to avoid the rx zeros:
+        rxcoll   = np.resize(rxcoll,kend+1)
+        timecoll = np.resize(timecoll,kend+1)
+        vxcoll   = np.resize(vxcoll,kend+1)
+        # Evolution of Nx(t) during collapse, only capture and annihilation, with rx(t), neglecting selfcapture
+        tuple1  = dm.Capt_v[i], dm.anncs, rxcoll, timecoll
+        Nxcoll  = np.array([item[0] for item in odeint(dNdt_C_A,dm.Nsg_v[i],timecoll,args=(tuple1))])
+        # Energy from annihilated particles:
+        Volx    = np.zeros(len(timecoll))
+        annrate = np.zeros(len(timecoll))
+        for k in xrange(0,kend+1):
+            Volx[k]    = 4./3.*m.pi*m.pow(rxcoll[k],3.)
+            try:
+                annrate[k] = dm.anncs/Volx[k] * m.pow(Nxcoll[k],2.)
+            except OverflowError:
+                annrate[k] = 9.e+99
+    else:
+        timecoll = rxcoll = vxcoll = Nxcoll = annrate = tff = kend = 0
+
     return timecoll, rxcoll ,vxcoll, Nxcoll, annrate, tff, kend
+
+def F_calcAnnrate_eq(i, t, dm):
+    eps = 0.01
+    ktemp = 0
+    for k in xrange(len(t.time)):
+        try:
+            t.annirate[k] = F_ann(dm.anncs,t.rx[k]) * m.pow(t.Nx[k],2.)
+        except OverflowError:
+            t.annirate[k] = 9.e+99
+        if ktemp==0 and (t.annirate[k]*(1-eps) < dm.Capt_v[i] < t.annirate[k]*(1+eps)):
+            print "-- Equilibrium between capture and annihilation rates reached at t=%.2e" % t.time[k]
+            dm.FluxEmit_v[i] = t.annirate[k] * dm.mx_v[i] * c_yr2s(1.)
+            ktemp=1
+        if k == (len(t.time)-1):
+            if (t.annirate[k]*(1-eps) < dm.Capt_v[i] < t.annirate[k]*(1+eps)):
+                print "   Equilibrium lasted until the end of time."
+                dm.notes_t[i].append('2a') 
+            elif ktemp==1:
+                print "   Equilibrium disappeared (probably because of transition from rxco to rth, that should be rechecked)"
+                dm.notes_t[i].append('2b')
+
+def F_printallevol(i, t, dm, Nsgvect, kscoll, kend, tff, timecoll, rxcoll, vxcoll, Nxcoll, annrate):
+    print" time(s)   time(yr)     Nx        Nsg      rx(type)          ann   "
+    for k in xrange(0,kscoll+1):
+        print "%.2e   %.2e   %.2e   %.2e   %.2e (%s)   %.2e   " % (t.time[k], c_s2yr(t.time[k]), t.Nx[k],
+                                                                Nsgvect[k], t.rx[k], t.rxtag[k], t.annirate[k])
+    if dm.SELFCOLL[i]:
+        print" now DM self collapses in a timescale < %.2e s" % tff
+        print " t         rx(cm)       vx/c       Nx      annrate(part/s)"
+        for k in xrange(0,kend+1):
+            print "%.2e   %.2e   %.2e   %.2e   %.2e" % (timecoll[k],rxcoll[k],vxcoll[k]/clight,Nxcoll[k],annrate[k])
+
+def F_computeNeutFluxes(i, st, dm):
+    # Flux of energy emitted:
+    # if not SELFCOLL, dm.FluxEmit_v[i] was already calculated
+    if dm.SELFCOLL[i]:
+        dm.FluxEmit_v[i]  = dm.Nsg_v[i] * dm.mx_v[i] / c_s2yr(dm.tNsg_v[i])               # GeV/yr
+    # Flux of neutrinos at Earth:
+    dm.FluxEarth_v[i] = dm.FluxEmit_v[i] /4./m.pi/m.pow(c_pc2m(st.dist),2.)               # GeV/m2/yr
+
