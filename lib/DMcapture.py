@@ -1,12 +1,8 @@
 import numpy as np
 from scipy.integrate import quad,romberg
 import math as m
-from unitconv import *
-
-# Constants:
-Grav = 6.67384e-11              # m3/kg/s2
-mp   = 1.67262178e-27           # kg
-
+from lib.unitconv import *
+from lib.constants import *
 
 #####################
 #    Main function
