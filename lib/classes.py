@@ -44,10 +44,13 @@ class cl_dm():
 		self.Nsg_v 	= np.zeros(len(self.mx_v))
 		self.tNsg_v	= np.zeros(len(self.mx_v))
         	self.notes_v	= ['' for k in range(0,len(self.mx_v))]
+                self.notes_t    = [[] for k in range(0,len(self.mx_v))]
 #		self.Flux_v	= np.zeros(len(self.mx_v))
 		self.FluxEmit_v = np.zeros(len(self.mx_v))
                 self.FluxEarth_v= np.zeros(len(self.mx_v))
                 self.Capt_v	= np.zeros(len(self.mx_v))
+                self.selfCapt_v = np.zeros(len(self.mx_v))
+		self.SELFCOLL   = [False]*len(self.mx_v)
         # more:
 		self.Nxinit = 0.	# np.array([0.])                   # initial values N(t=0)
 	
@@ -58,25 +61,46 @@ class cl_dm():
         	print "    bosonic DM:",self.BOSON
 
         def printOutput(self):
+            # prepares last column for output file:
+            codecol = []
+            for i in xrange(len(self.mx_v)):
+                if 0 in self.notes_t[i]:
+                    codecol.append(2)		# case 2: all cases which I am not confindent and should be rechecked
+                elif '2b' in self.notes_t[i]:
+                    codecol.append(2)           # case 2: all cases which I am not confindent and should be rechecked
+                elif 3 in self.notes_t[i]:
+                    codecol.append(2)           # case 2: all cases which I am not confindent and should be rechecked
+                elif 4 in self.notes_t[i]:
+                    codecol.append(2)           # case 2: all cases which I am not confindent and should be rechecked
+                elif 5 in self.notes_t[i]:
+                    codecol.append(2)           # case 2: all cases which I am not confindent and should be rechecked
+                elif 6 in self.notes_t[i]:
+                    codecol.append(2)           # case 2: all cases which I am not confindent and should be rechecked
+                elif 1 in self.notes_t[i]:
+                    codecol.append(0)		# case 0: no DM collapse, continuous neutrino flux
+                elif self.SELFCOLL[i]:
+                    codecol.append(1)           # case 1: DM self-collapse, neutrino flashes
+
+            f = open('DMStNeutrinoFlux.dat', 'a')
             print ""
-            print "# DM collapse and destruction of NS or self-annihilation burst:"
-            print "# mx(GeV)  period(yr)  Nx(collapse)  Flux@Earth(GeV/m2/yr)  notes"
-            for it1,it2,it3,it4,it5 in zip(self.mx_v,self.tNsg_v,self.Nsg_v,self.FluxEarth_v,self.notes_v):
-                print " %.2e  %.2e    %.2e      %.2e              %s" % (it1,c_s2yr(it2),it3,it4,it5)
-            print """\nNotes:
-            1:      Nsg not reached within the age of the Universe  
-            2:      Degenerate Dark Star will be formed (Nsg>Nde and >Nfe) only if 4 holds
-            4:      Degenerate Dark Star definitely formed (Nsg>Nde and >Nfe)
-            5:      Ngeoxx was reached, and Nx_C_sC_A_geoxx is not correct
-            6:      Nbec   was reached, check if BEC was correctly taken into account
-            7:      BEC occurs before geoxx limit, check if implementation is correct in this case
-             """
-            f = open('NeutrinoBursts.dat', 'a')
-            for it1,it2,it3,it4,it5,it6 in zip(self.mx_v, self.Nsg_v, self.tNsg_v, self.FluxEmit_v, self.FluxEarth_v, self.notes_v):
-#                f.write("%.2e  %.2e  %.2e  %.2e  %.2e  %.2e  %.2e  %s\n" % (self.sigx, self.anncs, 
-#                                                         it1, it2, c_s2yr(it3), it4, it5, it6) )
-                f.write("%.2e  %.2e  %.2e  %.2e  %.2e  %.2e  %.2e\n" % (self.sigx, self.anncs, it1, it2, c_s2yr(it3), it4, it5) )
+            print "DM collapse and neutrino flash from self-annihilation burst or continuous neutrino emission:"
+            print "sig_el_x   sig_ann_x  mx(GeV)  Nx(collapse) period(yr) Fluxemitt(GeV/yr) Flux@Earth(GeV/m2/yr) notes"
+#            for it1,it2,it3,it4,it5 in zip(self.mx_v,self.tNsg_v,self.Nsg_v,self.FluxEarth_v,self.notes_t):
+#                print " %.2e  %.2e    %.2e      %.2e              %s" % (it1,c_s2yr(it2),it3,it4,it5)
+            for it1,it2,it3,it4,it5,it6,it7 in zip(self.mx_v, self.Nsg_v, self.tNsg_v, self.FluxEmit_v, self.FluxEarth_v, self.notes_t, codecol):
+                print "%.2e   %.2e   %.2e   %.2e   %.2e   %.2e          %.2e              %s" % (self.sigx, self.anncs, it1, it2, c_s2yr(it3), it4, it5, it6)
+                f.write("%.2e  %.2e  %.2e  %.2e  %.2e  %.2e  %.2e  %i\n" % (self.sigx, self.anncs, it1, it2, c_s2yr(it3), it4, it5, it7) )
             f.close()
+
+            print """\nNotes:
+    0:  Error (check Nx or annrate in last time step)
+    1:  No DM self-collapse (Nsg not reached within the age of the Universe)  
+    2:  Equilibrium capture = annihilation rates reached, and (a) lasted or (b) disappeared (prob error in rx transition)"
+    3:  Degenerate Dark Star formed (Nsg>Nde and >Nfe)
+    4:  Geometrical limit in self-capture was reached: attention that Nx_C_sC_A_geoxx is not correct
+    5:  Bose-Einstein condensate formed, check if BEC is correctly implemented
+    6:  BEC occurs before geoxx limit, check if implementation is correct in this case
+             """
 
 
 class cl_timevars():
